@@ -190,10 +190,7 @@ class FileInput:
         else:
             if files is None:
                 files = sys.argv[1:]
-            if not files:
-                files = ('-',)
-            else:
-                files = tuple(files)
+            files = ('-', ) if not files else tuple(files)
         self._files = files
         self._inplace = inplace
         self._backup = backup
@@ -333,11 +330,7 @@ class FileInput:
         self._backupfilename = 0
 
         # EncodingWarning is emitted in __init__() already
-        if "b" not in self._mode:
-            encoding = self._encoding or "locale"
-        else:
-            encoding = None
-
+        encoding = self._encoding or "locale" if "b" not in self._mode else None
         if self._filename == '-':
             self._filename = '<stdin>'
             if 'b' in self._mode:
@@ -446,8 +439,10 @@ def _test():
     backup = False
     opts, args = getopt.getopt(sys.argv[1:], "ib:")
     for o, a in opts:
-        if o == '-i': inplace = True
-        if o == '-b': backup = a
+        if o == '-b':
+            backup = a
+        elif o == '-i':
+            inplace = True
     for line in input(args, inplace=inplace, backup=backup):
         if line[-1:] == '\n': line = line[:-1]
         if line[-1:] == '\r': line = line[:-1]

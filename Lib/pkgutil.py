@@ -215,10 +215,7 @@ class ImpImporter:
         subname = fullname.split(".")[-1]
         if subname != fullname and self.path is None:
             return None
-        if self.path is None:
-            path = None
-        else:
-            path = [os.path.realpath(self.path)]
+        path = None if self.path is None else [os.path.realpath(self.path)]
         try:
             file, filename, etc = imp.find_module(subname, path)
         except ImportError:
@@ -382,10 +379,13 @@ try:
 
             fn = fn[plen:].split(os.sep)
 
-            if len(fn)==2 and fn[1].startswith('__init__.py'):
-                if fn[0] not in yielded:
-                    yielded[fn[0]] = 1
-                    yield prefix + fn[0], True
+            if (
+                len(fn) == 2
+                and fn[1].startswith('__init__.py')
+                and fn[0] not in yielded
+            ):
+                yielded[fn[0]] = 1
+                yield prefix + fn[0], True
 
             if len(fn)!=1:
                 continue

@@ -143,10 +143,9 @@ class HMAC:
         """
         if self._hmac:
             return self._hmac
-        else:
-            h = self._outer.copy()
-            h.update(self._inner.digest())
-            return h
+        h = self._outer.copy()
+        h.update(self._inner.digest())
+        return h
 
     def digest(self):
         """Return the hash value of this hashing object.

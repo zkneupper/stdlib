@@ -278,37 +278,37 @@ class _Unframer:
             if n < len(buf):
                 raise UnpicklingError(
                     "pickle exhausted before end of frame")
-            return n
         else:
             n = len(buf)
             buf[:] = self.file_read(n)
-            return n
+
+        return n
 
     def read(self, n):
-        if self.current_frame:
-            data = self.current_frame.read(n)
-            if not data and n != 0:
-                self.current_frame = None
-                return self.file_read(n)
-            if len(data) < n:
-                raise UnpicklingError(
-                    "pickle exhausted before end of frame")
-            return data
-        else:
+        if not self.current_frame:
             return self.file_read(n)
 
+        data = self.current_frame.read(n)
+        if not data and n != 0:
+            self.current_frame = None
+            return self.file_read(n)
+        if len(data) < n:
+            raise UnpicklingError(
+                "pickle exhausted before end of frame")
+        return data
+
     def readline(self):
-        if self.current_frame:
-            data = self.current_frame.readline()
-            if not data:
-                self.current_frame = None
-                return self.file_readline()
-            if data[-1] != b'\n'[0]:
-                raise UnpicklingError(
-                    "pickle exhausted before end of frame")
-            return data
-        else:
+        if not self.current_frame:
             return self.file_readline()
+
+        data = self.current_frame.readline()
+        if not data:
+            self.current_frame = None
+            return self.file_readline()
+        if data[-1] != b'\n'[0]:
+            raise UnpicklingError(
+                "pickle exhausted before end of frame")
+        return data
 
     def load_frame(self, frame_size):
         if self.current_frame and self.current_frame.read() != b'':
@@ -376,9 +376,13 @@ def encode_long(x):
         return b''
     nbytes = (x.bit_length() >> 3) + 1
     result = x.to_bytes(nbytes, byteorder='little', signed=True)
-    if x < 0 and nbytes > 1:
-        if result[-1] == 0xff and (result[-2] & 0x80) != 0:
-            result = result[:-1]
+    if (
+        x < 0
+        and nbytes > 1
+        and result[-1] == 0xFF
+        and (result[-2] & 0x80) != 0
+    ):
+        result = result[:-1]
     return result
 
 def decode_long(data):

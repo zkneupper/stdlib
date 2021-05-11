@@ -322,10 +322,7 @@ class TextCalendar(Calendar):
         """
         Returns a formatted week day name.
         """
-        if width >= 9:
-            names = day_name
-        else:
-            names = day_abbr
+        names = day_name if width >= 9 else day_abbr
         return names[day][:width].center(width)
 
     def formatweekheader(self, width):
@@ -645,8 +642,7 @@ def timegm(tuple):
     days = datetime.date(year, month, 1).toordinal() - _EPOCH_ORD + day - 1
     hours = days*24 + hour
     minutes = hours*60 + minute
-    seconds = minutes*60 + second
-    return seconds
+    return minutes*60 + second
 
 
 def main(args):
@@ -715,10 +711,7 @@ def main(args):
     locale = options.locale, options.encoding
 
     if options.type == "html":
-        if options.locale:
-            cal = LocaleHTMLCalendar(locale=locale)
-        else:
-            cal = HTMLCalendar()
+        cal = LocaleHTMLCalendar(locale=locale) if options.locale else HTMLCalendar()
         encoding = options.encoding
         if encoding is None:
             encoding = sys.getdefaultencoding()
@@ -732,10 +725,7 @@ def main(args):
             parser.error("incorrect number of arguments")
             sys.exit(1)
     else:
-        if options.locale:
-            cal = LocaleTextCalendar(locale=locale)
-        else:
-            cal = TextCalendar()
+        cal = LocaleTextCalendar(locale=locale) if options.locale else TextCalendar()
         optdict = dict(w=options.width, l=options.lines)
         if options.month is None:
             optdict["c"] = options.spacing

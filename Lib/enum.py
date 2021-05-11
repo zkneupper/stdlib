@@ -54,15 +54,12 @@ def _is_private(cls_name, name):
     # do not use `re` as `re` imports `enum`
     pattern = '_%s__' % (cls_name, )
     pat_len = len(pattern)
-    if (
+    return bool((
             len(name) > pat_len
             and name.startswith(pattern)
             and name[pat_len:pat_len+1] != ['_']
             and (name[-1] != '_' or name[-2] != '_')
-        ):
-        return True
-    else:
-        return False
+        ))
 
 def _is_single_bit(num):
     """
@@ -113,9 +110,8 @@ def bin(num, max_bits=None):
         s = _bltin_bin(~num ^ (ceiling - 1) + ceiling)
     sign = s[:3]
     digits = s[3:]
-    if max_bits is not None:
-        if len(digits) < max_bits:
-            digits = (sign[-1] * max_bits + digits)[-max_bits:]
+    if max_bits is not None and len(digits) < max_bits:
+        digits = (sign[-1] * max_bits + digits)[-max_bits:]
     return "%s %s" % (sign, digits)
 
 
@@ -144,22 +140,22 @@ class property(DynamicClassAttribute):
                         '%s: no class attribute %r' % (ownerclass.__name__, self.name)
                         )
         else:
-            if self.fget is None:
-                # check for member
-                if self.name in ownerclass._member_map_:
-                    import warnings
-                    warnings.warn(
-                            "accessing one member from another is not supported, "
-                            " and will be disabled in 3.12",
-                            DeprecationWarning,
-                            stacklevel=2,
-                            )
-                    return ownerclass._member_map_[self.name]
-                raise AttributeError(
-                        '%s: no instance attribute %r' % (ownerclass.__name__, self.name)
-                        )
-            else:
+            if self.fget is not None:
                 return self.fget(instance)
+
+            # check for member
+            if self.name in ownerclass._member_map_:
+                import warnings
+                warnings.warn(
+                        "accessing one member from another is not supported, "
+                        " and will be disabled in 3.12",
+                        DeprecationWarning,
+                        stacklevel=2,
+                        )
+                return ownerclass._member_map_[self.name]
+            raise AttributeError(
+                    '%s: no instance attribute %r' % (ownerclass.__name__, self.name)
+                    )
 
     def __set__(self, instance, value):
         if self.fset is None:
@@ -463,12 +459,11 @@ class EnumType(type):
         # sabotage -- it's on them to make sure it works correctly.  We use
         # __reduce_ex__ instead of any of the others as it is preferred by
         # pickle over __reduce__, and it handles all pickle protocols.
-        if '__reduce_ex__' not in classdict:
-            if member_type is not object:
-                methods = ('__getnewargs_ex__', '__getnewargs__',
-                        '__reduce_ex__', '__reduce__')
-                if not any(m in member_type.__dict__ for m in methods):
-                    _make_class_unpicklable(classdict)
+        if '__reduce_ex__' not in classdict and member_type is not object:
+            methods = ('__getnewargs_ex__', '__getnewargs__',
+                    '__reduce_ex__', '__reduce__')
+            if all(m not in member_type.__dict__ for m in methods):
+                _make_class_unpicklable(classdict)
         #
         # create a default docstring if one has not been provided
         if '__doc__' not in classdict:
@@ -514,9 +509,8 @@ class EnumType(type):
         # - check that _order_ and _member_names_ match
         #
         # step 1: ensure we have a list
-        if _order_ is not None:
-            if isinstance(_order_, str):
-                _order_ = _order_.replace(',', ' ').split()
+        if _order_ is not None and isinstance(_order_, str):
+            _order_ = _order_.replace(',', ' ').split()
         #
         # remove Flag structures if final class is not a Flag
         if (
@@ -527,7 +521,7 @@ class EnumType(type):
             delattr(enum_class, '_flag_mask_')
             delattr(enum_class, '_all_bits_')
             delattr(enum_class, '_inverted_')
-        elif Flag is not None and issubclass(enum_class, Flag):
+        elif Flag is not None:
             # ensure _all_bits_ is correct and there are no missing flags
             single_bit_total = 0
             multi_bit_total = 0
@@ -772,10 +766,7 @@ class EnumType(type):
         # also, replace the __reduce_ex__ method so unpickling works in
         # previous Python versions
         module_globals = sys.modules[module].__dict__
-        if source:
-            source = source.__dict__
-        else:
-            source = module_globals
+        source = source.__dict__ if source else module_globals
         # _value2member_map_ is populated in the same order every time
         # for a consistent reverse mapping of number to name when there
         # are multiple names for the same number.
@@ -831,8 +822,6 @@ class EnumType(type):
                             data_types.append(base._member_type_)
                             break
                     elif '__new__' in base.__dict__:
-                        if issubclass(base, Enum):
-                            continue
                         data_types.append(candidate or base)
                         break
                     else:
@@ -1216,9 +1205,10 @@ class Flag(Enum, boundary=STRICT):
         if not hasattr(pseudo_member, '_value_'):
             pseudo_member._value_ = value
         if member_value:
-            pseudo_member._name_ = '|'.join([
+            pseudo_member._name_ = '|'.join(
                 m._name_ for m in cls._iter_member_(member_value)
-                ])
+            )
+
             if unknown:
                 pseudo_member._name_ += '|0x%x' % unknown
         else:
@@ -1261,14 +1251,13 @@ class Flag(Enum, boundary=STRICT):
             return '%s.%s' % (cls_name, self._name_)
         if self._boundary_ is not FlagBoundary.KEEP:
             return '%s.' % cls_name + ('|%s.' % cls_name).join(self.name.split('|'))
-        else:
-            name = []
-            for n in self._name_.split('|'):
-                if n.startswith('0'):
-                    name.append(n)
-                else:
-                    name.append('%s.%s' % (cls_name, n))
-            return '|'.join(name)
+        name = []
+        for n in self._name_.split('|'):
+            if n.startswith('0'):
+                name.append(n)
+            else:
+                name.append('%s.%s' % (cls_name, n))
+        return '|'.join(name)
 
     def __str__(self):
         cls = self.__class__
@@ -1357,13 +1346,17 @@ def unique(enumeration):
     """
     Class decorator for enumerations ensuring unique member values.
     """
-    duplicates = []
-    for name, member in enumeration.__members__.items():
-        if name != member.name:
-            duplicates.append((name, member.name))
+    duplicates = [
+        (name, member.name)
+        for name, member in enumeration.__members__.items()
+        if name != member.name
+    ]
+
     if duplicates:
         alias_details = ', '.join(
-                ["%s -> %s" % (alias, name) for (alias, name) in duplicates])
+            "%s -> %s" % (alias, name) for (alias, name) in duplicates
+        )
+
         raise ValueError('duplicate values found in %r: %s' %
                 (enumeration, alias_details))
     return enumeration
@@ -1385,14 +1378,13 @@ def global_flag_repr(self):
         return '%s.%s' % (module, self._name_)
     if self._boundary_ is not FlagBoundary.KEEP:
         return module + module.join(self.name.split('|'))
-    else:
-        name = []
-        for n in self._name_.split('|'):
-            if n.startswith('0'):
-                name.append(n)
-            else:
-                name.append('%s.%s' % (module, n))
-        return '|'.join(name)
+    name = []
+    for n in self._name_.split('|'):
+        if n.startswith('0'):
+            name.append(n)
+        else:
+            name.append('%s.%s' % (module, n))
+    return '|'.join(name)
 
 
 def global_enum(cls):
@@ -1401,10 +1393,7 @@ def global_enum(cls):
     instead of its class; also exports all members to the enum's module's
     global namespace
     """
-    if issubclass(cls, Flag):
-        cls.__repr__ = global_flag_repr
-    else:
-        cls.__repr__ = global_enum_repr
+    cls.__repr__ = global_flag_repr if issubclass(cls, Flag) else global_enum_repr
     sys.modules[cls.__module__].__dict__.update(cls.__members__)
     return cls
 
@@ -1692,10 +1681,7 @@ def _old_convert_(etype, name, module, filter, source=None, *, boundary=None):
     # also, replace the __reduce_ex__ method so unpickling works in
     # previous Python versions
     module_globals = sys.modules[module].__dict__
-    if source:
-        source = source.__dict__
-    else:
-        source = module_globals
+    source = source.__dict__ if source else module_globals
     # _value2member_map_ is populated in the same order every time
     # for a consistent reverse mapping of number to name when there
     # are multiple names for the same number.

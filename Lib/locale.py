@@ -191,23 +191,20 @@ def _format(percent, value, grouping=False, monetary=False, *additional):
 
 # Transform formatted as locale number according to the locale settings
 def _localize(formatted, grouping=False, monetary=False):
+    seps = 0
     # floats and decimal ints need special action!
     if '.' in formatted:
-        seps = 0
         parts = formatted.split('.')
         if grouping:
             parts[0], seps = _group(parts[0], monetary=monetary)
         decimal_point = localeconv()[monetary and 'mon_decimal_point'
                                               or 'decimal_point']
         formatted = decimal_point.join(parts)
-        if seps:
-            formatted = _strip_padding(formatted, seps)
     else:
-        seps = 0
         if grouping:
             formatted, seps = _group(formatted, monetary=monetary)
-        if seps:
-            formatted = _strip_padding(formatted, seps)
+    if seps:
+        formatted = _strip_padding(formatted, seps)
     return formatted
 
 def format_string(f, val, grouping=False, monetary=False):
@@ -220,8 +217,8 @@ def format_string(f, val, grouping=False, monetary=False):
     percents = list(_percent_re.finditer(f))
     new_f = _percent_re.sub('%s', f)
 
+    new_val = []
     if isinstance(val, _collections_abc.Mapping):
-        new_val = []
         for perc in percents:
             if perc.group()[-1]=='%':
                 new_val.append('%')
@@ -230,7 +227,6 @@ def format_string(f, val, grouping=False, monetary=False):
     else:
         if not isinstance(val, tuple):
             val = (val,)
-        new_val = []
         i = 0
         for perc in percents:
             if perc.group()[-1]=='%':
@@ -360,10 +356,7 @@ def _test():
 _setlocale = setlocale
 
 def _replace_encoding(code, encoding):
-    if '.' in code:
-        langname = code[:code.index('.')]
-    else:
-        langname = code
+    langname = code[:code.index('.')] if '.' in code else code
     # Convert the encoding to a C lib compatible encoding string
     norm_encoding = encodings.normalize_encoding(encoding)
     #print('norm encoding: %r' % norm_encoding)
