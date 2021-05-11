@@ -962,7 +962,7 @@ class StackObject(object):
         assert isinstance(name, str)
         self.name = name
 
-        assert isinstance(obtype, type) or isinstance(obtype, tuple)
+        assert isinstance(obtype, (type, tuple))
         if isinstance(obtype, tuple):
             for contained in obtype:
                 assert isinstance(contained, type)
@@ -2236,23 +2236,22 @@ def assure_pickle_consistency(verbose=False):
                        "code" % (name, picklecode)))
             continue
         picklecode = picklecode.decode("latin-1")
-        if picklecode in copy:
-            if verbose:
-                print("checking name %r w/ code %r for consistency" % (
-                      name, picklecode))
-            d = copy[picklecode]
-            if d.name != name:
-                raise ValueError("for pickle code %r, pickle.py uses name %r "
-                                 "but we're using name %r" % (picklecode,
-                                                              name,
-                                                              d.name))
-            # Forget this one.  Any left over in copy at the end are a problem
-            # of a different kind.
-            del copy[picklecode]
-        else:
+        if picklecode not in copy:
             raise ValueError("pickle.py appears to have a pickle opcode with "
                              "name %r and code %r, but we don't" %
                              (name, picklecode))
+        if verbose:
+            print("checking name %r w/ code %r for consistency" % (
+                  name, picklecode))
+        d = copy[picklecode]
+        if d.name != name:
+            raise ValueError("for pickle code %r, pickle.py uses name %r "
+                             "but we're using name %r" % (picklecode,
+                                                          name,
+                                                          d.name))
+        # Forget this one.  Any left over in copy at the end are a problem
+        # of a different kind.
+        del copy[picklecode]
     if copy:
         msg = ["we appear to have pickle opcodes that pickle.py doesn't have:"]
         for code, d in copy.items():
@@ -2269,11 +2268,7 @@ def _genops(data, yield_end_pos=False):
     if isinstance(data, bytes_types):
         data = io.BytesIO(data)
 
-    if hasattr(data, "tell"):
-        getpos = data.tell
-    else:
-        getpos = lambda: None
-
+    getpos = data.tell if hasattr(data, "tell") else (lambda: None)
     while True:
         pos = getpos()
         code = data.read(1)
@@ -2285,10 +2280,7 @@ def _genops(data, yield_end_pos=False):
                 raise ValueError("at position %s, opcode %r unknown" % (
                                  "<unknown>" if pos is None else pos,
                                  code))
-        if opcode.arg is None:
-            arg = None
-        else:
-            arg = opcode.arg.reader(data)
+        arg = None if opcode.arg is None else opcode.arg.reader(data)
         if yield_end_pos:
             yield opcode, arg, pos, getpos()
         else:
@@ -2464,9 +2456,8 @@ def dis(pickle, out=None, memo=None, indentlevel=4, annotate=0):
                                     stack and
                                     stack[-1] is markobject):
             assert markobject not in after
-            if __debug__:
-                if markobject in before:
-                    assert before[-1] is stackslice
+            if __debug__ and markobject in before:
+                assert before[-1] is stackslice
             if markstack:
                 markpos = markstack.pop()
                 if markpos is None:
@@ -2512,10 +2503,10 @@ def dis(pickle, out=None, memo=None, indentlevel=4, annotate=0):
         if arg is not None or markmsg:
             # make a mild effort to align arguments
             line += ' ' * (10 - len(opcode.name))
-            if arg is not None:
-                line += ' ' + repr(arg)
-            if markmsg:
-                line += ' ' + markmsg
+        if arg is not None:
+            line += ' ' + repr(arg)
+        if markmsg:
+            line += ' ' + markmsg
         if annotate:
             line += ' ' * (annocol - len(line))
             # make a mild effort to align annotations
